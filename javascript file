@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+
+<html>
+	<style> 	
+		div{ margin-top:10px; font-size: .9em;}
+		input[type='number']{width:25px;}
+		#info{}
+		#clickSetting{}
+		.container{position:inherit;float:right; left:850px;padding:10px; width:500px; height:600px; }
+	 </style>
+	<canvas id ="canvas" width="830px" height="600px" style="background-color:#333;border:1px solid black"></canvas>
+	
+	
+	<body>
+		<div class="container">
+			<p>Force X<input id="fx" type="range" min="-20" max="20" value = "0"></input> 
+			Force Y<input id="fy" type="range" min="-20" max="20" value = "0"></input>
+			<button onclick="switchReset()">clc</button>
+
+			<div id = 'info'>
+				<b>Display Rays:</b>
+				Yes <input id= "Y" type = "radio" name = "dr" checked>
+	  			No <input id= "N" type = "radio" name = "dr" > </p>
+
+	  			<b>Display Force Vector Map:</b>
+				Yes <input id= "Y1" type = "radio" name = "vm" checked>
+	  			No <input id= "N1" type = "radio" name = "vm" > 
+
+	  		</div>
+
+	  		<div id = "clickSetting">
+	  			Size of Ray <input id="rayS" type = "number" value = "70" max="200"></input></p>
+	  			<b>Add Ball Mass:</b>
+	  			Magnetic Force <input id= "Y2" type = "radio" name = "bm"  >
+	  			Point Mass <input id= "N2" type = "radio" name = "bm" checked> </p>
+	  			</p><button onclick="addBalls()">Generate 100 balls</button>
+	  				<button onclick="randomizeF()">Randomize Forces</button>
+	  			</p>
+	  			</p><button onclick="reset()" id = "reset" style = "margin-top:5px;">Reset</button>
+
+	  		</div>
+
+	  	</div>
+		<script>
+
+		/*
+
+
+			take stuff out of an interval and just call the method adjustForce when we get a bool that it change
+		*/
+			var can = document.getElementById("canvas"),
+			ctx = can.getContext("2d"),
+			eLeft = can.offsetLeft,
+			eTop = can.offsetTop;
+			var lastfx = parseInt(document.getElementById("fx").value), lastfy = parseInt(document.getElementById("fy").value);
+			var GridPts = [];
+			var HPts = [];
+			var VPts = [];
+			var BezCurvs = [];
+			var changeForce = false;
+			var colors = [];
+			var checkChange = setInterval(adjustForce,100);
+			var checkCord = setInterval(checkLoc,100);
+			var lstClick = [];
+			var ballClick = [];
+			var firstClick = true;
+			var loc = new Point(0,0);
+			var cX,cY;
+			var elForce = 0;
+			var chargeX,chargeY;
+			var forceList = new Array(100);
+			var randomizing = false;
+
+			can.addEventListener('click', handleclick, false);
+
+
+
+
+			window.onload=function()
+			{
+				placeSubPts();
+				paintSub();
+				drawBoard(); 
+			}
+
+			function drawBoard()
+			{
+				ctx.clearRect(0,0,can.width,can.height);
+				paintSub();
+				
+
+				if(document.getElementById("Y1").checked){
+					connectPts();
+					drawGrid();}
+				if(document.getElementById("Y").checked)
+					drawRays();
+
+			}
+			function reset()
+			{
+				BezCurvs.length = 0;
+				lstClick.length = 0;
+				ballClick.length = 0;
+			}
+			function randomize()
+			{
+				var fx1 = document.getElementById("fx").value;
+				var fy1 = document.getElementById("fy").value;
+
+				var ran = Math.floor(Math.random()*3);
+				var ran2 = -Math.floor(Math.random()*3);
+				if(ran%2==0){ran*=-1;}
+				if(ran%2==0){ran2*=-1;}
+				for(var i = 0;i<ballClick.length;i++){
+					if(isOutside(ballClick[i]).Pt){
+						//Do something?
+					}
+				}
+				var cVal = document.getElementById("fx").value;
+				var cVal2 = document.getElementById("fy").value;
+				if(cVal+ran<=5&&cVal+ran>=-10){
+					document.getElementById("fx").value+=ran;}
+				else{
+					document.getElementById("fx").value-=ran;}
+
+				if(cVal2+ran2<=5&&cVal2+ran2>=-10){
+					document.getElementById("fy").value+=ran2;}
+				else {
+					document.getElementById("fy").value-=ran2;}
+			}
+			function randomizeF()
+			{
+				if(!randomizing)
+				{
+					randomizing=true;
+					alarm = setInterval(randomize,1000);
+				}
+				else{
+					clearInterval(alarm);
+				}
+			}
+			function isOutside(pt)
+			{
+				if(pt.X<0||pt.X>can.width){return true;}
+				if(pt.Y<0||pt.Y>can.height){return true;}
+				return false;
+			}
+			function refresh()
+			{
+				drawBoard();
+				drawBalls();
+				if(!firstClick){
+					var p = new Point(cX,cY);
+					drawLine(loc,p);
+				}
+
+			}
+			function drawRays()
+			{
+				for(var i = 0;i<lstClick.length;i++)
+				{
+					drawRay(lstClick[i].X,lstClick[i].Y);
+				}
+			}
+			function addBalls()
+			{
+				for(var i = 0;i<100;i++)
+				{
+					var rand1 = eLeft+ Math.floor(Math.random()*can.width);
+					var rand2 = eTop+ Math.floor(Math.random()*can.height);
+					var pt = new Point(rand1,rand2);
+					var ball = new VBall(pt,new forcePair(0,0));
+					ballClick.push(ball);
+				}
+			}
+			function adjustForce()
+			{
+				var fx = parseInt(document.getElementById("fx").value);
+				var fy = parseInt(document.getElementById("fy").value);	
+				//console.log(fx,fy);
+				if(isNaN(fx))
+					fx = 0;
+				if(isNaN(fy))
+					fy=0;
+				if(fx!=lastfx || fy!=lastfy){
+					if(fx!=lastfx){lastfx=fx;}
+					if(fy!=lastfy){lastfy=fy;}
+
+					changeForce = true;
+				}
+
+			}
+			function forcePair(a,b)
+			{
+				var fP = {X:a, Y:b};
+				return fP;
+			}
+			function handleclick()
+			{
+
+				var x = parseInt(event.pageX-eLeft), 
+				y = parseInt(event.pageY-eTop);
+				var pt = new Point(x,y);
+
+				if(!firstClick){
+					firstClick=true;
+					var chargeX = (x-loc.X)/5;
+					var chargeY = (loc.Y-y)/5;
+					var fp = new forcePair(chargeX,chargeY);
+					ballClick[elForce].Force = (fp);
+				}
+				else{
+					if(document.getElementById("Y2").checked){
+						lstClick.push(pt);}
+					else{
+						for(var i = 0;i<ballClick.length;i++){
+							if(Math.abs(getDistance(pt,ballClick[i].Pt)<7)){
+									loc = ballClick[i].Pt;
+									elForce = i;
+									console.log(elForce); // not reaching here?
+									firstClick=false;
+							}
+						}
+						if(firstClick){
+							var initF = new forcePair(0,0);
+							var temp = new VBall(pt,initF);
+							ballClick.push(temp);
+
+						}
+					}
+				}
+
+				
+
+			}
+			function VBall(pt, forcePair)
+			{
+				if(!isNaN(pt.X)&&!isNaN(pt.Y)&&!isNaN(forcePair.X)&&!isNaN(forcePair.X)){
+					var ball = {Pt:pt,Force:forcePair};
+					return ball;}
+			}
+
+			function checkLoc()
+			{
+				canvas.addEventListener("mousemove",function(){
+					cX = parseInt(event.pageX-eLeft);
+					cY = parseInt(event.pageY-eTop);
+				});
+			}
+			function drawLine(ptA,ptB)
+			{
+				ctx.save();
+				ctx.strokeStyle="Black";
+				ctx.beginPath();
+				ctx.lineWidth=3;
+				ctx.moveTo(ptA.X,ptA.Y);
+				ctx.lineTo(ptB.X,ptB.Y);
+				ctx.stroke();
+				ctx.restore();
+
+				
+			
+			}
+			function drawCircle(pt)
+			{
+				ctx.moveTo(pt.X,pt.Y);
+				ctx.beginPath();
+				ctx.arc(pt.X, pt.Y, 5, 0, Math.PI * 2);
+				ctx.fillStyle = "red";
+				ctx.fill();
+				ctx.strokeStyle = "white";
+				ctx.stroke();
+			}
+			function drawBalls()
+			{
+				var raysize = parseInt(document.getElementById("rayS").value);
+				for(var i = 0;i<ballClick.length;i++)
+				{
+						if(!isNaN(ballClick[i].Force.X)&&!isNaN(ballClick[i].Force.Y)){
+							ballClick[i].Pt.X +=ballClick[i].Force.X;
+							ballClick[i].Pt.Y -=ballClick[i].Force.Y; }
+					
+					for(var j = 0;j<lstClick.length;j++){
+						var d1 = getDistance(ballClick[i].Pt,lstClick[j]);
+						var dx = Math.abs(ballClick[i].Pt.X-lstClick[j].X);
+						var dy = Math.abs(ballClick[i].Pt.Y-lstClick[j].Y);
+
+						if(d1<=raysize){
+							if(ballClick[i].Pt.X<lstClick[j].X){ ballClick[i].Pt.X+=2; }
+							else{ballClick[i].Pt.X-=2;}
+
+							if(ballClick[i].Pt.Y<lstClick[j].Y){ ballClick[i].Pt.Y+=2; }
+							else{ballClick[i].Pt.Y-=2;}
+
+						}
+					}
+
+					ballClick[i].Pt.X += lastfx;
+					ballClick[i].Pt.Y -= lastfy;
+					drawCircle(ballClick[i].Pt);
+					
+				}
+			}
+			function switchReset()
+			{
+				document.getElementById("fx").value = 0;
+				document.getElementById("fy").value = 0;
+			}
+			function drawRay(a,b)
+			{
+				var raysize = parseInt(document.getElementById("rayS").value);
+				ctx.strokeStyle = "Red";
+				for(var i = 2;i<raysize;i+=3){
+					ctx.moveTo(a,b);
+					ctx.beginPath();
+					ctx.arc(a, b, i, 0, Math.PI * 2);
+					ctx.stroke();}
+			}
+
+			function irand()
+			{
+					 var v = Math.floor(Math.random() * 256).toString(16);
+		      		return v;
+			}
+
+			function newCord(pta,ptb)
+			{
+				var x1 = pta.X, y1 = pta.Y;
+				var x2 = ptb.X, y2 = ptb.Y;
+				var r = 50/getDistance(pta,ptb);
+
+			}
+
+			function connectPts()
+			{//put global forces in here
+				var raysize = parseInt(document.getElementById("rayS").value);
+				if(!isNaN(raysize)){raysize=70}
+				ctx.clearRect(eLeft,eTop,can.width,can.height);
+				var rand = Math.floor(Math.random()*3);
+				var color_b = "black";
+				for(var i = 0;i<BezCurvs.length&&i<500;i++){
+					if(isPt(BezCurvs[i].pt1)&&isPt(BezCurvs[i].pt2)&&isPt(BezCurvs[i].pt3)&&isPt(BezCurvs[i].pt4)){
+						var x = BezCurvs[i].pt1.X, y = BezCurvs[i].pt1.Y,
+						x1 = BezCurvs[i].pt2.X+lastfx,y1 = BezCurvs[i].pt2.Y-lastfy,
+						x2= BezCurvs[i].pt3.X+lastfx,y2= BezCurvs[i].pt3.Y-lastfy,
+						x3= BezCurvs[i].pt4.X,y3= BezCurvs[i].pt4.Y;
+				
+						ctx.strokeStyle=color_b;
+						if(lstClick.length>0)
+						{
+							for(var j = 0;j<lstClick.length;j++){
+								var d1 = getDistance(BezCurvs[i].pt2,lstClick[j]);
+								var d2 = getDistance(BezCurvs[i].pt3,lstClick[j]);
+								if(d1<=raysize || d2<=raysize){
+									if(BezCurvs[i].pt2.X<lstClick[j].X)
+									{
+										x1+=15*(d1/raysize);
+									}
+									if(BezCurvs[i].pt3.X<lstClick[j].X){
+										x2+=15*(d2/raysize);
+									}
+									else if(BezCurvs[i].pt2.X>lstClick[j].X)
+									{
+										x1-=15*(d1/raysize);
+									}
+									else if(BezCurvs[i].pt3.X>lstClick[j].X){
+										x2-=15*(d2/raysize);
+
+									}
+
+									if(BezCurvs[i].pt2.Y<lstClick[j].Y)
+									{
+										y1+=15*(d1/raysize);
+									}
+									if(BezCurvs[i].pt3.Y<lstClick[j].Y){
+										y2+=15*(d2/raysize);
+									}
+									if(BezCurvs[i].pt2.Y>lstClick[j].Y)
+									{
+										y1-=15*(d1/raysize);
+									}
+									if(BezCurvs[i].pt3.Y>lstClick[j].X){
+										y2-=15*(d2/raysize);
+
+									}
+								}
+
+
+							}
+							//figure out distance between x1,x2,y1,y2 and the clicked point, give different force
+
+						}
+						ctx.beginPath();
+						ctx.moveTo(x,y);
+						ctx.bezierCurveTo(
+								x1, y1,
+								x2, y2,
+								x3, y3);
+						ctx.stroke();
+						
+					}
+				}
+			}
+			function isPt(point)
+			{
+				if(!isNaN(point.X)&&!isNaN(point.Y)){return true;}
+				return false;
+			}
+			function bezPts(pta,ptb,ptc,ptd)
+			{
+				var bezPt = {pt1:pta, pt2:ptb, pt3:ptc, pt4:ptd};
+				return bezPt;
+			}
+			function Point(a,b)
+			{
+				if(!isNaN(a)&&!isNaN(b)){
+					var point = {X:a,Y:b};
+					return point;}
+			}
+			function getDistance(pta,ptb){
+				var x1 = pta.X, y1 = pta.Y;
+				var x2 = ptb.X, y2 = ptb.Y;
+				var sxs = Math.pow((y2-y1),2);
+				var sys = Math.pow((x2-x1),2);
+				return Math.sqrt(sxs + sys);
+			}
+			function drawGrid()
+			{
+				var count1 = count2 = 0;
+				ctx.fillStyle = "White";
+				for(var j = eLeft;j<can.width;j+=45){
+					for(var i = eTop;i<can.height;i+=45)
+					{
+						ctx.fillRect(j-1.8,i-2,5,5);
+						//var pt = new Point(j,i);
+						count2++;
+					}
+					count1++;
+				}
+			}
+			function paintSub()
+			{
+				BezCurvs.length=0;
+				ctx.clearRect(0,0,can.width,can.height);
+
+				var paceH = paceV = 0;
+				
+				for(var i = 0;i<HPts.length;i++)
+				{
+					//ctx.fillStyle = "Red";
+					if(paceH==55){paceH=0;}
+					if(paceH%3==0){
+						//ctx.fillStyle = "Blue";
+						if(paceH!=0){
+							var newB = bezPts(HPts[i-3],HPts[i-2],HPts[i-1],HPts[i]);
+							BezCurvs.push(newB);
+						}
+					}
+					//ctx.fillRect(HPts[i].X,HPts[i].Y,2,2);
+					paceH++;
+				}
+				for(var j = 0;j<VPts.length;j++)
+				{
+					ctx.fillStyle = "Red";
+					if(paceV==40){paceV=0;}
+					if(paceV%3==0){
+						ctx.fillStyle = "Blue";
+						if(paceV!=0){
+							var newC = bezPts(VPts[j-3],VPts[j-2],VPts[j-1],VPts[j]);
+							BezCurvs.push(newC);}
+					}
+					//ctx.fillRect(VPts[j].X,VPts[j].Y,2,2);
+					paceV++;
+				}
+
+			}
+			function placeSubPts()
+			{
+				var count=0;
+				for(var j = eLeft;j<can.width;j+=45){
+					for(var i = eTop;i<can.height;i+=15)
+					{
+						ctx.fillStyle = "red";
+						var pt = new Point(j,i);
+						VPts.push(pt);
+						if(j==eLeft&&count%3==0)
+						{
+							for(var p = eLeft;p<can.width-1;p+=15)
+							{
+								var pt1 = new Point(p,i);
+								HPts.push(pt1);
+							}
+						}
+						count++;
+
+					}
+
+				}
+			}
+			var colorb;
+		var updateBoard = setInterval(refresh,300);
+		var alarm;
+
+		</script>
+	</body>
